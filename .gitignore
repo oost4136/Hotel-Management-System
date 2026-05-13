@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local data and generated receipts
+*.db
+receipts/
+
+# Build outputs
+build/
+dist/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Environment and local config
+.env
+.env.*
+!.env.example
+*.pem
+.tools/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
