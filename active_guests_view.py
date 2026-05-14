@@ -203,15 +203,24 @@ class CheckoutModal(ctk.CTkToplevel):
         
         try:
             pdf_path = pdf_gen.create_hotel_receipt(data)
-            messagebox.showinfo("Success", f"Checkout successful!\nReceipt saved to:\n{pdf_path}")
             
-            # Open PDF
-            if sys.platform == "win32":
-                os.startfile(pdf_path)
-            elif sys.platform == "darwin":
-                subprocess.call(["open", pdf_path])
+            if os.path.exists(pdf_path):
+                messagebox.showinfo("Success", f"Checkout successful!\nReceipt saved to:\n{pdf_path}")
+                
+                # Open PDF automatically
+                try:
+                    if sys.platform == "win32":
+                        os.startfile(pdf_path)
+                    elif sys.platform == "darwin":
+                        subprocess.call(["open", pdf_path])
+                    else:
+                        subprocess.call(["xdg-open", pdf_path])
+                except Exception as open_err:
+                    print(f"Error opening PDF: {open_err}")
+                    messagebox.showwarning("Warning", "Receipt saved but could not be opened automatically.")
             else:
-                subprocess.call(["xdg-open", pdf_path])
+                messagebox.showerror("Error", "PDF file was not created. Please check the 'receipts' folder.")
+                
         except Exception as e:
             messagebox.showerror("PDF Error", f"Checkout successful, but PDF generation failed:\n{e}")
 

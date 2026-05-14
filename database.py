@@ -54,7 +54,16 @@ class LuxuryDB:
     def create_tables(self):
         cursor = self.conn.cursor()
         
-        cursor.execute('''CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, business_name TEXT, primary_color TEXT, caution_fee REAL, logo_path TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY, 
+            business_name TEXT, 
+            primary_color TEXT, 
+            secondary_color TEXT DEFAULT '#3498db',
+            font_family TEXT DEFAULT 'Arial',
+            caution_fee REAL, 
+            logo_path TEXT,
+            currency_symbol TEXT DEFAULT '₦'
+        )''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS rooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, caution_fee REAL, is_available INTEGER DEFAULT 1, image_url TEXT, amenities TEXT)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_name TEXT, guest_phone TEXT, room_id INTEGER, adults INTEGER DEFAULT 1, children INTEGER DEFAULT 0, caution_fee REAL DEFAULT 0, check_in TEXT, check_out TEXT, status TEXT DEFAULT 'Active', FOREIGN KEY (room_id) REFERENCES rooms (id))''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT DEFAULT 'staff')''')
@@ -134,8 +143,8 @@ class LuxuryDB:
     def save_settings(self, data):
         try:
             self.execute_non_query(
-                "UPDATE settings SET business_name=?, primary_color=?, caution_fee=?, logo_path=?, currency_symbol=? WHERE id=1",
-                (data['business_name'], data['primary_color'], data['caution_fee'], data['logo_path'], data.get('currency_symbol', '₦'))
+                "UPDATE settings SET business_name=?, primary_color=?, secondary_color=?, font_family=?, caution_fee=?, logo_path=?, currency_symbol=? WHERE id=1",
+                (data['business_name'], data['primary_color'], data.get('secondary_color', '#3498db'), data.get('font_family', 'Arial'), data['caution_fee'], data['logo_path'], data.get('currency_symbol', '₦'))
             )
             return True
         except Exception as e:

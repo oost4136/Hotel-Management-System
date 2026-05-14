@@ -21,13 +21,22 @@ import {
   Plus,
   Minus,
   ShoppingCart,
+  Upload,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type User = { id: number; username: string; role: string };
 type DashboardStats = { total_bookings: number; active_guests: number; available_rooms: number; total_rooms: number };
-type AppSettings = { business_name: string; primary_color: string; caution_fee: number; logo_path: string; currency_symbol: string };
+type AppSettings = {
+  business_name: string;
+  primary_color: string;
+  secondary_color: string;
+  font_family: string;
+  caution_fee: number;
+  logo_path: string;
+  currency_symbol: string;
+};
 type Room = { id: number; name: string; price: number; caution_fee: number; is_available: number; image_url?: string; amenities?: string };
 type Staff = { id: number; username: string; role: string };
 type RecentBooking = { id: number; customer_name: string; room_name: string | null; status: string; caution_fee: number | null; room_price: number | null };
@@ -38,10 +47,14 @@ type Tab = "overview" | "rooms" | "checkin" | "active-guests" | "inventory" | "s
 type BookingCreate = { customer_name: string; guest_phone: string; room_id: number; adults: number; children: number; caution_fee: number };
 type InventoryItemCreate = { item_name: string; price: number; stock_level: number; category: string; image_path?: string };
 type SaleCreate = { booking_id: number | null; guest_name?: string; item_id: number; item_name: string; quantity: number; price: number; payment_status: string };
+type LogoUploadResponse = { logo_path: string; logo_url: string };
+type CheckoutResponse = { ok: boolean; receipt_url?: string };
 
 const emptySettings: AppSettings = {
   business_name: "",
   primary_color: "#2ecc71",
+  secondary_color: "#3498db",
+  font_family: "Arial",
   caution_fee: 0,
   logo_path: "",
   currency_symbol: "",
@@ -89,6 +102,7 @@ export default function Dashboard() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [receiptUrl, setReceiptUrl] = useState("");
 
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const headers = useMemo(
@@ -98,6 +112,20 @@ export default function Dashboard() {
     }),
     [token],
   );
+
+  // Inject Theme Variables
+  useEffect(() => {
+    if (!settings.primary_color) return;
+    
+    const root = document.documentElement;
+    root.style.setProperty("--primary", settings.primary_color);
+    root.style.setProperty("--sidebar-primary", settings.primary_color);
+    root.style.setProperty("--app-font-sans", settings.font_family + ", ui-sans-serif, system-ui");
+    
+    if (settings.secondary_color) {
+      root.style.setProperty("--secondary", settings.secondary_color);
+    }
+  }, [settings]);
 
   const apiRequest = async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
     const response = await fetch(apiUrl(path), {
@@ -212,32 +240,32 @@ export default function Dashboard() {
     <div className="min-h-screen bg-black text-white flex overflow-hidden">
       <aside className="w-64 border-r border-zinc-800 bg-zinc-950 flex flex-col shrink-0">
         <div className="p-6">
-          <h1 className="text-xl font-bold text-emerald-500 tracking-tight">{businessName}</h1>
+          <h1 className="text-xl font-bold text-emerald-500 tracking-tight" style={{ color: settings.primary_color }}>{businessName}</h1>
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
           {primaryNavItems.map((item) => (
-            <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} onClick={() => navigateToTab(item.tab)} />
+            <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} activeColor={settings.primary_color} onClick={() => navigateToTab(item.tab)} />
           ))}
           
           {user.role === "admin" && (
             <>
               <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Admin</div>
               {adminNavItems.map((item) => (
-                <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} onClick={() => navigateToTab(item.tab)} />
+                <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} activeColor={settings.primary_color} onClick={() => navigateToTab(item.tab)} />
               ))}
             </>
           )}
           
           <div className="pt-4 pb-2 px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Support</div>
           {supportNavItems.map((item) => (
-            <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} onClick={() => navigateToTab(item.tab)} />
+            <NavItem key={item.tab} icon={item.icon} label={item.label} active={selectedTab === item.tab} activeColor={settings.primary_color} onClick={() => navigateToTab(item.tab)} />
           ))}
         </nav>
 
         <div className="p-4 mt-auto border-t border-zinc-800">
           <div className="flex items-center gap-3 mb-4 p-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-xs" style={{ backgroundColor: settings.primary_color }}>
               {user.username[0].toUpperCase()}
             </div>
             <div className="min-w-0">
@@ -285,6 +313,7 @@ export default function Dashboard() {
             <button
               onClick={() => navigateToTab("checkin")}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{ backgroundColor: settings.primary_color }}
             >
               <UserPlus className="w-4 h-4" />
               <span>Check-In</span>
@@ -294,9 +323,16 @@ export default function Dashboard() {
 
         <div className="p-8 max-w-7xl mx-auto">
           {message && (
-            <button onClick={() => setMessage("")} className="mb-6 w-full text-left rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-              {message}
-            </button>
+            <div className="mb-6 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              <button onClick={() => { setMessage(""); setReceiptUrl(""); }} className="w-full text-left">
+                {message}
+              </button>
+              {receiptUrl && (
+                <a href={apiUrl(receiptUrl)} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-semibold text-white underline decoration-emerald-400 underline-offset-4">
+                  Open receipt
+                </a>
+              )}
+            </div>
           )}
 
           {selectedTab === "overview" && (
@@ -308,11 +344,13 @@ export default function Dashboard() {
               formatCurrency={formatCurrency}
               showAdmin={user.role === "admin"}
               onNavigate={navigateToTab}
+              themeColor={settings.primary_color}
             />
           )}
 
           {selectedTab === "rooms" && (
             <RoomsPage
+              user={user}
               rooms={filteredRooms}
               amenities={amenities}
               formatCurrency={formatCurrency}
@@ -324,6 +362,14 @@ export default function Dashboard() {
                 await apiRequest(`/rooms/${id}`, { method: "DELETE" });
                 await refresh("Room deleted successfully.");
               }}
+              onUploadImage={async (filename, dataUrl) => {
+                const uploaded = await apiRequest<{ image_url: string }>("/uploads/image", {
+                  method: "POST",
+                  body: JSON.stringify({ filename, data_url: dataUrl }),
+                });
+                return uploaded.image_url;
+              }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -336,6 +382,7 @@ export default function Dashboard() {
                 await refresh(`${booking.customer_name} checked in successfully.`);
                 setActiveTab("active-guests");
               }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -348,9 +395,12 @@ export default function Dashboard() {
                 await refresh("Stay extended successfully.");
               }}
               onCheckout={async (id, roomId) => {
-                await apiRequest(`/bookings/${id}/checkout?room_id=${roomId}`, { method: "POST" });
-                await refresh("Guest checked out successfully.");
+                const result = await apiRequest<CheckoutResponse>(`/bookings/${id}/checkout?room_id=${roomId}`, { method: "POST" });
+                setReceiptUrl(result.receipt_url || "");
+                if (result.receipt_url) window.open(apiUrl(result.receipt_url), "_blank", "noopener,noreferrer");
+                await refresh(result.receipt_url ? "Guest checked out successfully. Receipt is ready." : "Guest checked out successfully.");
               }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -374,6 +424,14 @@ export default function Dashboard() {
                 await apiRequest("/inventory", { method: "POST", body: JSON.stringify(item) });
                 await refresh("Item added to inventory.");
               }}
+              onUploadImage={async (filename, dataUrl) => {
+                const uploaded = await apiRequest<{ image_url: string }>("/uploads/image", {
+                  method: "POST",
+                  body: JSON.stringify({ filename, data_url: dataUrl }),
+                });
+                return uploaded.image_url;
+              }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -388,6 +446,7 @@ export default function Dashboard() {
                 await apiRequest(`/staff/${id}`, { method: "DELETE" });
                 await refresh("Staff account deleted successfully.");
               }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -401,6 +460,20 @@ export default function Dashboard() {
                 setSettings({ ...emptySettings, ...updated });
                 await refresh("Settings updated successfully.");
               }}
+              onUploadLogo={async (filename, dataUrl) => {
+                const uploaded = await apiRequest<LogoUploadResponse>("/uploads/logo", {
+                  method: "POST",
+                  body: JSON.stringify({ filename, data_url: dataUrl }),
+                });
+                return uploaded;
+              }}
+              onUploadImage={async (filename, dataUrl) => {
+                const uploaded = await apiRequest<{ image_url: string }>("/uploads/image", {
+                  method: "POST",
+                  body: JSON.stringify({ filename, data_url: dataUrl }),
+                });
+                return uploaded.image_url;
+              }}
               onAddAmenity={async (name) => {
                 const updated = await apiRequest<string[]>("/amenities", { method: "POST", body: JSON.stringify({ name }) });
                 setAmenities(updated);
@@ -411,6 +484,7 @@ export default function Dashboard() {
                 setAmenities(updated);
                 await refresh("Amenity deleted successfully.");
               }}
+              themeColor={settings.primary_color}
             />
           )}
 
@@ -420,6 +494,7 @@ export default function Dashboard() {
                 await apiRequest("/support", { method: "POST", body: JSON.stringify({ message }) });
                 setMessage("Message sent successfully! The developer will check the logs.");
               }}
+              themeColor={settings.primary_color}
             />
           )}
         </div>
@@ -428,9 +503,7 @@ export default function Dashboard() {
   );
 }
 
-// ... rest of components ...
-
-function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNavigate }: {
+function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNavigate, themeColor }: {
   user: User;
   stats: DashboardStats | null;
   bookings: RecentBooking[];
@@ -438,6 +511,7 @@ function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNa
   formatCurrency: (value: number) => string;
   showAdmin: boolean;
   onNavigate: (tab: Tab) => void;
+  themeColor: string;
 }) {
   const statCards = [
     { label: "Total Historical", value: stats?.total_bookings?.toString() || "0", icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10" },
@@ -473,7 +547,7 @@ function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNa
             className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl hover:border-zinc-700 transition-all cursor-default"
           >
             <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4", stat.bg)}>
-              <stat.icon className={cn("w-5 h-5", stat.color)} />
+              <stat.icon className={cn("w-5 h-5", stat.color)} style={{ color: themeColor }} />
             </div>
             <p className="text-zinc-500 text-sm font-medium">{stat.label}</p>
             <h3 className="text-2xl font-bold mt-1 tracking-tight">{stat.value}</h3>
@@ -488,7 +562,7 @@ function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNa
             onClick={() => onNavigate(action.tab)}
             className="flex items-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 text-left transition-all hover:border-emerald-500/60 hover:bg-zinc-900"
           >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400" style={{ backgroundColor: themeColor + '20', color: themeColor }}>
               <action.icon className="h-5 w-5" />
             </span>
             <span className="min-w-0">
@@ -506,7 +580,7 @@ function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNa
         <Panel title="System Alerts">
           <div className="space-y-4">
             {logs.length > 0 ? logs.map((log) => (
-              <AlertItem key={log.id} title={log.action} desc={log.details || log.username} time={log.timestamp} />
+              <AlertItem key={log.id} title={log.action} desc={log.details || log.username} time={log.timestamp} themeColor={themeColor} />
             )) : <p className="text-sm text-zinc-500">No activity logs found</p>}
           </div>
         </Panel>
@@ -515,18 +589,25 @@ function Overview({ user, stats, bookings, logs, formatCurrency, showAdmin, onNa
   );
 }
 
-function RoomsPage({ rooms, amenities, formatCurrency, onCreate, onDelete }: {
+function RoomsPage({ user, rooms, amenities, formatCurrency, onCreate, onDelete, onUploadImage, themeColor }: {
+  user: User;
   rooms: Room[];
   amenities: string[];
   formatCurrency: (value: number) => string;
   onCreate: (room: Omit<Room, "id" | "is_available">) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  onUploadImage: (filename: string, dataUrl: string) => Promise<string>;
+  themeColor: string;
 }) {
   const [form, setForm] = useState({ name: "", price: "", caution_fee: "", image_url: "", amenities: "" });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const isAdmin = user.role === "admin";
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!isAdmin) return;
     setSaving(true);
     try {
       await onCreate({
@@ -545,40 +626,78 @@ function RoomsPage({ rooms, amenities, formatCurrency, onCreate, onDelete }: {
   return (
     <div className="space-y-8">
       <SectionHeader title="Rooms & Apartments" description="Connected to the existing room database functions." />
-      <Panel title="Add Room">
-        <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <Input value={form.name} onChange={(value) => setForm({ ...form, name: value })} placeholder="Room name" required />
-          <Input value={form.price} onChange={(value) => setForm({ ...form, price: value })} placeholder="Price" type="number" required />
-          <Input value={form.caution_fee} onChange={(value) => setForm({ ...form, caution_fee: value })} placeholder="Caution fee" type="number" required />
-          <Input value={form.image_url} onChange={(value) => setForm({ ...form, image_url: value })} placeholder="Image path" />
-          <button disabled={saving} className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60">
-            {saving ? "Saving..." : "Save Room"}
-          </button>
-          <select
-            value={form.amenities}
-            onChange={(event) => setForm({ ...form, amenities: event.target.value })}
-            className="md:col-span-5 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none"
-          >
-            <option value="">No amenity preset selected</option>
-            {amenities.map((amenity) => <option key={amenity} value={amenity}>{amenity}</option>)}
-          </select>
-        </form>
-      </Panel>
+      
+      {isAdmin && (
+        <Panel title="Add Room">
+          <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <Input value={form.name} onChange={(value) => setForm({ ...form, name: value })} placeholder="Room name" required />
+            <Input value={form.price} onChange={(value) => setForm({ ...form, price: value })} placeholder="Price" type="number" required />
+            <Input value={form.caution_fee} onChange={(value) => setForm({ ...form, caution_fee: Number(value) })} placeholder="Caution fee" type="number" required />
+            
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2 text-xs text-white hover:border-zinc-700 cursor-pointer">
+              <span className="truncate">{uploading ? "Uploading..." : form.image_url ? "Image Uploaded ✓" : "Upload Image"}</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={uploading}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setUploading(true);
+                  try {
+                    const dataUrl = await readFileAsDataUrl(file);
+                    const url = await onUploadImage(file.name, dataUrl);
+                    setForm({ ...form, image_url: url });
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              />
+            </label>
+
+            <button disabled={saving || uploading} className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60" style={{ backgroundColor: themeColor }}>
+              {saving ? "Saving..." : "Save Room"}
+            </button>
+            <select
+              value={form.amenities}
+              onChange={(event) => setForm({ ...form, amenities: event.target.value })}
+              className="md:col-span-5 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none"
+            >
+              <option value="">No amenity preset selected</option>
+              {amenities.map((amenity) => <option key={amenity} value={amenity}>{amenity}</option>)}
+            </select>
+          </form>
+        </Panel>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {rooms.length > 0 ? rooms.map((room) => (
-          <div key={room.id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
-            <div className="flex items-start justify-between gap-4">
+          <div key={room.id} className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden flex">
+            {room.image_url ? (
+              <div 
+                className="w-32 bg-cover bg-center shrink-0 border-r border-zinc-800" 
+                style={{ backgroundImage: `url(${apiUrl(room.image_url)})` }}
+              />
+            ) : (
+              <div className="w-32 bg-zinc-800 shrink-0 flex items-center justify-center border-r border-zinc-800">
+                <BedDouble className="w-8 h-8 text-zinc-600" />
+              </div>
+            )}
+            <div className="p-5 flex-1 flex items-start justify-between gap-4">
               <div>
                 <h3 className="font-bold">{room.name}</h3>
                 <p className="text-sm text-zinc-400">{formatCurrency(room.price)} / night</p>
-                <p className={cn("mt-2 text-xs font-bold uppercase", room.is_available ? "text-emerald-500" : "text-red-400")}>
+                <p className={cn("mt-2 text-xs font-bold uppercase", room.is_available ? "text-emerald-500" : "text-red-400")} style={{ color: room.is_available ? themeColor : undefined }}>
                   {room.is_available ? "Available" : "Checked-In"}
                 </p>
                 {room.amenities && <p className="mt-3 text-sm text-zinc-500">{room.amenities}</p>}
               </div>
-              <button onClick={() => onDelete(room.id)} className="rounded-lg bg-red-500/10 p-2 text-red-400 hover:bg-red-500/20">
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {isAdmin && (
+                <button onClick={() => onDelete(room.id)} className="rounded-lg bg-red-500/10 p-2 text-red-400 hover:bg-red-500/20">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         )) : <EmptyState text="No rooms found." />}
@@ -587,10 +706,11 @@ function RoomsPage({ rooms, amenities, formatCurrency, onCreate, onDelete }: {
   );
 }
 
-function StaffPage({ staff, onCreate, onDelete }: {
+function StaffPage({ staff, onCreate, onDelete, themeColor }: {
   staff: Staff[];
   onCreate: (staff: { username: string; password: string; role: string }) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
+  themeColor: string;
 }) {
   const [form, setForm] = useState({ username: "", password: "", role: "staff" });
   const [saving, setSaving] = useState(false);
@@ -617,7 +737,7 @@ function StaffPage({ staff, onCreate, onDelete }: {
             <option value="staff">Staff</option>
             <option value="admin">Admin</option>
           </select>
-          <button disabled={saving} className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60">
+          <button disabled={saving} className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60" style={{ backgroundColor: themeColor }}>
             {saving ? "Creating..." : "Create Account"}
           </button>
         </form>
@@ -627,7 +747,7 @@ function StaffPage({ staff, onCreate, onDelete }: {
           <div key={member.id} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <div>
               <p className="font-semibold">{member.username}</p>
-              <p className="text-xs uppercase text-zinc-500">{member.role}</p>
+              <p className="text-xs uppercase text-zinc-500" style={{ color: member.role === 'admin' ? themeColor : undefined }}>{member.role}</p>
             </div>
             {member.id === 1 ? (
               <span className="text-xs text-zinc-500">Master Admin</span>
@@ -643,16 +763,21 @@ function StaffPage({ staff, onCreate, onDelete }: {
   );
 }
 
-function SettingsPage({ settings, amenities, onSave, onAddAmenity, onDeleteAmenity }: {
+function SettingsPage({ settings, amenities, onSave, onUploadLogo, onUploadImage, onAddAmenity, onDeleteAmenity, themeColor }: {
   settings: AppSettings;
   amenities: string[];
   onSave: (settings: AppSettings) => Promise<void>;
+  onUploadLogo: (filename: string, dataUrl: string) => Promise<LogoUploadResponse>;
+  onUploadImage: (filename: string, dataUrl: string) => Promise<string>;
   onAddAmenity: (name: string) => Promise<void>;
   onDeleteAmenity: (name: string) => Promise<void>;
+  themeColor: string;
 }) {
   const [form, setForm] = useState(settings);
   const [amenityName, setAmenityName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState("");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -672,12 +797,94 @@ function SettingsPage({ settings, amenities, onSave, onAddAmenity, onDeleteAmeni
           <Input value={form.business_name} onChange={(value) => setForm({ ...form, business_name: value })} placeholder="Hotel name" required />
           <Input value={String(form.caution_fee)} onChange={(value) => setForm({ ...form, caution_fee: Number(value) })} placeholder="Default caution fee" type="number" required />
           <Input value={form.currency_symbol} onChange={(value) => setForm({ ...form, currency_symbol: value })} placeholder="Currency symbol" />
-          <Input value={form.logo_path} onChange={(value) => setForm({ ...form, logo_path: value })} placeholder="Logo path" />
-          <Input value={form.primary_color} onChange={(value) => setForm({ ...form, primary_color: value })} placeholder="Theme color" />
-          <button disabled={saving} className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60">
-            <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
+          <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white hover:border-zinc-700">
+            <span className="flex min-w-0 items-center gap-3">
+              <Upload className="h-4 w-4 shrink-0 text-zinc-400" />
+              <span className="truncate">{uploadingLogo ? "Uploading logo..." : form.logo_path ? "Logo selected ✓" : "Choose logo image"}</span>
+            </span>
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              className="sr-only"
+              disabled={uploadingLogo}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                setUploadingLogo(true);
+                try {
+                  const dataUrl = await readFileAsDataUrl(file);
+                  const uploaded = await onUploadLogo(file.name, dataUrl);
+                  setForm({ ...form, logo_path: uploaded.logo_path });
+                  setLogoPreview(dataUrl);
+                } finally {
+                  setUploadingLogo(false);
+                  event.target.value = "";
+                }
+              }}
+            />
+          </label>
+          
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1">Primary Color</label>
+            <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2">
+              <input
+                type="color"
+                value={isHexColor(form.primary_color) ? form.primary_color : "#2ecc71"}
+                onChange={(event) => setForm({ ...form, primary_color: event.target.value })}
+                className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-transparent p-0"
+                aria-label="Primary color"
+              />
+              <Input value={form.primary_color} onChange={(value) => setForm({ ...form, primary_color: value })} placeholder="#2ecc71" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1">Secondary Color</label>
+            <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2">
+              <input
+                type="color"
+                value={isHexColor(form.secondary_color) ? form.secondary_color : "#3498db"}
+                onChange={(event) => setForm({ ...form, secondary_color: event.target.value })}
+                className="h-7 w-10 cursor-pointer rounded border border-zinc-700 bg-transparent p-0"
+                aria-label="Secondary color"
+              />
+              <Input value={form.secondary_color} onChange={(value) => setForm({ ...form, secondary_color: value })} placeholder="#3498db" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase ml-1">System Font</label>
+            <select
+              value={form.font_family}
+              onChange={(e) => setForm({ ...form, font_family: e.target.value })}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-emerald-500/50"
+            >
+              <option value="Arial">Arial (Default)</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Tahoma">Tahoma</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Courier New">Courier New</option>
+            </select>
+          </div>
+
+          {logoPreview && (
+            <div className="md:col-span-2 flex items-center gap-3 rounded-lg border border-zinc-800 bg-black/30 p-3">
+              <div
+                aria-label="Selected logo preview"
+                className="h-12 w-12 shrink-0 rounded bg-white bg-contain bg-center bg-no-repeat"
+                style={{ backgroundImage: `url(${logoPreview})` }}
+              />
+              <span className="min-w-0 truncate text-sm text-zinc-400">Logo ready. Click Save Changes to apply it.</span>
+            </div>
+          )}
+          
+          <div className="md:col-span-2 pt-4">
+            <button disabled={saving} className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-4 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60 transition-all" style={{ backgroundColor: themeColor }}>
+              <Save className="h-4 w-4" />
+              {saving ? "Saving..." : "Save All Changes"}
+            </button>
+          </div>
         </form>
       </Panel>
       <Panel title="Amenities & Facilities">
@@ -691,7 +898,7 @@ function SettingsPage({ settings, amenities, onSave, onAddAmenity, onDeleteAmeni
           className="mb-4 flex gap-3"
         >
           <Input value={amenityName} onChange={setAmenityName} placeholder="New amenity name" />
-          <button className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500">Add</button>
+          <button className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold hover:bg-emerald-500" style={{ backgroundColor: themeColor }}>Add</button>
         </form>
         <div className="flex flex-wrap gap-2">
           {amenities.length > 0 ? amenities.map((amenity) => (
@@ -737,9 +944,13 @@ function BookingsTable({ bookings, formatCurrency }: { bookings: RecentBooking[]
   );
 }
 
-function NavItem({ icon: Icon, label, active, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; active: boolean; onClick: () => void }) {
+function NavItem({ icon: Icon, label, active, onClick, activeColor }: { icon: React.ComponentType<{ className?: string }>; label: string; active: boolean; onClick: () => void; activeColor: string }) {
   return (
-    <button onClick={onClick} className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm", active ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20" : "text-zinc-400 hover:text-white hover:bg-zinc-900")}>
+    <button 
+      onClick={onClick} 
+      className={cn("w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm", active ? "text-white shadow-lg" : "text-zinc-400 hover:text-white hover:bg-zinc-900")}
+      style={active ? { backgroundColor: activeColor, boxShadow: `0 10px 15px -3px ${activeColor}33` } : {}}
+    >
       <Icon className="w-5 h-5" />
       <span>{label}</span>
     </button>
@@ -764,6 +975,19 @@ function SectionHeader({ title, description }: { title: string; description: str
       <p className="text-zinc-500 mt-1">{description}</p>
     </div>
   );
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
 function Input({ value, onChange, placeholder, type = "text", required = false }: { value: string; onChange: (value: string) => void; placeholder: string; type?: string; required?: boolean }) {
@@ -794,10 +1018,10 @@ function BookingRow({ name, room, status, amount }: { name: string; room: string
   );
 }
 
-function AlertItem({ title, desc, time }: { title: string; desc: string; time: string }) {
+function AlertItem({ title, desc, time, themeColor }: { title: string; desc: string; time: string; themeColor: string }) {
   return (
     <div className="flex gap-4 p-4 rounded-xl bg-black/40 border border-zinc-800/50 hover:border-zinc-700 transition-all">
-      <div className="mt-1 shrink-0 text-emerald-500"><AlertCircle className="w-5 h-5" /></div>
+      <div className="mt-1 shrink-0 text-emerald-500" style={{ color: themeColor }}><AlertCircle className="w-5 h-5" /></div>
       <div className="min-w-0">
         <h5 className="text-sm font-semibold truncate">{title}</h5>
         <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{desc}</p>
@@ -811,10 +1035,11 @@ function EmptyState({ text }: { text: string }) {
   return <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-sm text-zinc-500">{text}</div>;
 }
 
-function CheckInPage({ rooms, formatCurrency, onCheckIn }: {
+function CheckInPage({ rooms, formatCurrency, onCheckIn, themeColor }: {
   rooms: Room[];
   formatCurrency: (value: number) => string;
   onCheckIn: (booking: BookingCreate) => Promise<void>;
+  themeColor: string;
 }) {
   const [form, setForm] = useState({ customer_name: "", guest_phone: "", room_id: "", adults: "1", children: "0", caution_fee: "" });
   const [saving, setSaving] = useState(false);
@@ -880,7 +1105,7 @@ function CheckInPage({ rooms, formatCurrency, onCheckIn }: {
             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">Caution Fee Paid</label>
             <Input value={form.caution_fee} onChange={(v) => setForm({ ...form, caution_fee: v })} type="number" placeholder="Amount" required />
           </div>
-          <button disabled={saving || !form.room_id} className="w-full rounded-lg bg-emerald-600 px-4 py-4 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60 transition-all mt-4">
+          <button disabled={saving || !form.room_id} className="w-full rounded-lg bg-emerald-600 px-4 py-4 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60 transition-all mt-4" style={{ backgroundColor: themeColor }}>
             {saving ? "Processing..." : "Complete Check-In"}
           </button>
         </form>
@@ -889,11 +1114,12 @@ function CheckInPage({ rooms, formatCurrency, onCheckIn }: {
   );
 }
 
-function ActiveGuestsPage({ bookings, formatCurrency, onExtend, onCheckout }: {
+function ActiveGuestsPage({ bookings, formatCurrency, onExtend, onCheckout, themeColor }: {
   bookings: ActiveBooking[];
   formatCurrency: (value: number) => string;
   onExtend: (id: number, date: string) => Promise<void>;
   onCheckout: (id: number, roomId: number) => Promise<void>;
+  themeColor: string;
 }) {
   const [selectedBooking, setSelectedBooking] = useState<ActiveBooking | null>(null);
   const [newDate, setNewDate] = useState("");
@@ -906,7 +1132,7 @@ function ActiveGuestsPage({ bookings, formatCurrency, onExtend, onCheckout }: {
           <div key={booking.booking_id} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex gap-4">
               <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
-                <Users className="w-6 h-6 text-blue-500" />
+                <Users className="w-6 h-6 text-blue-500" style={{ color: themeColor }} />
               </div>
               <div>
                 <h3 className="text-lg font-bold">{booking.customer_name}</h3>
@@ -957,6 +1183,7 @@ function ActiveGuestsPage({ bookings, formatCurrency, onExtend, onCheckout }: {
                     setSelectedBooking(null);
                   }}
                   className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition-all"
+                  style={{ backgroundColor: themeColor }}
                 >
                   Save Date
                 </button>
@@ -969,7 +1196,7 @@ function ActiveGuestsPage({ bookings, formatCurrency, onExtend, onCheckout }: {
   );
 }
 
-function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustStock, onSell, onCreate }: {
+function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustStock, onSell, onCreate, onUploadImage, themeColor }: {
   user: User;
   items: InventoryItem[];
   activeBookings: ActiveBooking[];
@@ -977,18 +1204,23 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
   onAdjustStock: (id: number, amount: number) => Promise<void>;
   onSell: (sale: SaleCreate) => Promise<void>;
   onCreate: (item: InventoryItemCreate) => Promise<void>;
+  onUploadImage: (filename: string, dataUrl: string) => Promise<string>;
+  themeColor: string;
 }) {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [sellForm, setSellForm] = useState({ quantity: "1", customer_type: "Walk-in", guest_id: "", walkin_name: "", payment_status: "Paid" });
   const [showAdd, setShowAdd] = useState(false);
-  const [addForm, setAddForm] = useState({ item_name: "", price: "", stock_level: "", category: "Drinks" });
+  const [addForm, setAddForm] = useState({ item_name: "", price: "", stock_level: "", category: "Drinks", image_path: "" });
+  const [uploading, setUploading] = useState(false);
+
+  const isAdmin = user.role === "admin";
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <SectionHeader title="Bar & Restaurant Inventory" description="Real-time stock tracking and sales point." />
-        {user.role === "admin" && (
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+        {isAdmin && (
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-semibold transition-all" style={{ backgroundColor: themeColor }}>
             <Plus className="w-4 h-4" />
             <span>Add Item</span>
           </button>
@@ -997,33 +1229,49 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.length > 0 ? items.map((item) => (
-          <div key={item.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 overflow-hidden group">
-            <div className="flex justify-between items-start mb-4">
-              <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{item.category}</span>
-              <div className={cn("flex items-center gap-1.5 text-xs font-bold", item.stock_level < 5 ? "text-red-400" : "text-emerald-500")}>
-                <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", item.stock_level < 5 ? "bg-red-400" : "bg-emerald-500")} />
-                Stock: {item.stock_level}
+          <div key={item.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 overflow-hidden group flex flex-col">
+            {item.image_path ? (
+              <div className="h-40 bg-cover bg-center border-b border-zinc-800" style={{ backgroundImage: `url(${apiUrl(item.image_path)})` }} />
+            ) : (
+              <div className="h-40 bg-zinc-800 flex items-center justify-center border-b border-zinc-800">
+                <Package className="w-10 h-10 text-zinc-600" />
               </div>
-            </div>
-            <h3 className="text-lg font-bold group-hover:text-emerald-400 transition-colors">{item.item_name}</h3>
-            <p className="text-zinc-400 font-mono text-sm mt-1">{formatCurrency(item.price)}</p>
-            
-            <div className="mt-6 flex items-center justify-between">
-              <div className="flex gap-1">
-                <button onClick={() => onAdjustStock(item.id, -1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 transition-all"><Minus className="w-4 h-4" /></button>
-                <button onClick={() => onAdjustStock(item.id, 1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 hover:text-emerald-400 transition-all"><Plus className="w-4 h-4" /></button>
+            )}
+            <div className="p-5 flex-1">
+              <div className="flex justify-between items-start mb-4">
+                <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{item.category}</span>
+                <div className={cn("flex items-center gap-1.5 text-xs font-bold", item.stock_level < 5 ? "text-red-400" : "text-emerald-500")} style={{ color: item.stock_level >= 5 ? themeColor : undefined }}>
+                  <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", item.stock_level < 5 ? "bg-red-400" : "bg-emerald-500")} style={{ backgroundColor: item.stock_level >= 5 ? themeColor : undefined }} />
+                  Stock: {item.stock_level}
+                </div>
               </div>
-              <button
-                disabled={item.stock_level <= 0}
-                onClick={() => {
-                  setSelectedItem(item);
-                  setSellForm({ quantity: "1", customer_type: "Walk-in", guest_id: activeBookings[0]?.booking_id.toString() || "", walkin_name: "", payment_status: "Paid" });
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-bold transition-all"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                Sell
-              </button>
+              <h3 className="text-lg font-bold group-hover:text-emerald-400 transition-colors" style={{ "--tw-group-hover-color": themeColor } as any}>{item.item_name}</h3>
+              <p className="text-zinc-400 font-mono text-sm mt-1">{formatCurrency(item.price)}</p>
+              
+              <div className="mt-6 flex items-center justify-between">
+                <div className="flex gap-1">
+                  {isAdmin ? (
+                    <>
+                      <button onClick={() => onAdjustStock(item.id, -1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 transition-all"><Minus className="w-4 h-4" /></button>
+                      <button onClick={() => onAdjustStock(item.id, 1)} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-emerald-500/20 hover:text-emerald-400 transition-all" style={{ "--tw-hover-color": themeColor } as any}><Plus className="w-4 h-4" /></button>
+                    </>
+                  ) : (
+                    <div className="text-[10px] text-zinc-600 italic">Sales Only Access</div>
+                  )}
+                </div>
+                <button
+                  disabled={item.stock_level <= 0}
+                  onClick={() => {
+                    setSelectedItem(item);
+                    setSellForm({ quantity: "1", customer_type: "Walk-in", guest_id: activeBookings[0]?.booking_id.toString() || "", walkin_name: "", payment_status: "Paid" });
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-bold transition-all"
+                  style={{ backgroundColor: themeColor }}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  Sell
+                </button>
+              </div>
             </div>
           </div>
         )) : <EmptyState text="No inventory items found." />}
@@ -1042,8 +1290,8 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
               <div className="space-y-1">
                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Customer Type</label>
                 <div className="flex gap-2">
-                  <button onClick={() => setSellForm({ ...sellForm, customer_type: "Walk-in", payment_status: "Paid" })} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", sellForm.customer_type === "Walk-in" ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-zinc-800 text-zinc-500 hover:border-zinc-700")}>Walk-in</button>
-                  <button disabled={activeBookings.length === 0} onClick={() => setSellForm({ ...sellForm, customer_type: "Guest" })} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-30", sellForm.customer_type === "Guest" ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-zinc-800 text-zinc-500 hover:border-zinc-700")}>Active Guest</button>
+                  <button onClick={() => setSellForm({ ...sellForm, customer_type: "Walk-in", payment_status: "Paid" })} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all", sellForm.customer_type === "Walk-in" ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-zinc-800 text-zinc-500 hover:border-zinc-700")} style={sellForm.customer_type === "Walk-in" ? { borderColor: themeColor, backgroundColor: themeColor + '1a', color: themeColor } : {}}>Walk-in</button>
+                  <button disabled={activeBookings.length === 0} onClick={() => setSellForm({ ...sellForm, customer_type: "Guest" })} className={cn("flex-1 py-2 rounded-lg border text-sm font-medium transition-all disabled:opacity-30", sellForm.customer_type === "Guest" ? "border-emerald-500 bg-emerald-500/10 text-emerald-400" : "border-zinc-800 text-zinc-500 hover:border-zinc-700")} style={sellForm.customer_type === "Guest" ? { borderColor: themeColor, backgroundColor: themeColor + '1a', color: themeColor } : {}}>Active Guest</button>
                 </div>
               </div>
               {sellForm.customer_type === "Guest" ? (
@@ -1093,6 +1341,7 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
                     setSelectedItem(null);
                   }}
                   className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition-all"
+                  style={{ backgroundColor: themeColor }}
                 >
                   Confirm Sale
                 </button>
@@ -1113,9 +1362,10 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
                 price: Number(addForm.price),
                 stock_level: Number(addForm.stock_level),
                 category: addForm.category,
+                image_path: addForm.image_path,
               });
               setShowAdd(false);
-              setAddForm({ item_name: "", price: "", stock_level: "", category: "Drinks" });
+              setAddForm({ item_name: "", price: "", stock_level: "", category: "Drinks", image_path: "" });
             }} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Item Name</label>
@@ -1140,9 +1390,35 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
                   <Input type="number" value={addForm.stock_level} onChange={(v) => setAddForm({ ...addForm, stock_level: v })} placeholder="0" required />
                 </div>
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Item Image</label>
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white hover:border-zinc-700 cursor-pointer">
+                  <span className="truncate">{uploading ? "Uploading..." : addForm.image_path ? "Image Uploaded ✓" : "Choose Image"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setUploading(true);
+                      try {
+                        const dataUrl = await readFileAsDataUrl(file);
+                        const url = await onUploadImage(file.name, dataUrl);
+                        setAddForm({ ...addForm, image_path: url });
+                      } finally {
+                        setUploading(false);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowAdd(false)} className="flex-1 px-4 py-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm font-bold transition-all">Cancel</button>
-                <button type="submit" className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition-all">Save Item</button>
+                <button type="submit" disabled={uploading} className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-bold transition-all" style={{ backgroundColor: themeColor }}>Save Item</button>
               </div>
             </form>
           </div>
@@ -1152,7 +1428,7 @@ function InventoryPage({ user, items, activeBookings, formatCurrency, onAdjustSt
   );
 }
 
-function HelpPage({ onSend }: { onSend: (message: string) => Promise<void> }) {
+function HelpPage({ onSend, themeColor }: { onSend: (message: string) => Promise<void>; themeColor: string }) {
   const [msg, setMsg] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -1162,7 +1438,7 @@ function HelpPage({ onSend }: { onSend: (message: string) => Promise<void> }) {
       <Panel title="Contact Information">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0"><LifeBuoy className="w-5 h-5" /></div>
+            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0" style={{ backgroundColor: themeColor + '1a', color: themeColor }}><LifeBuoy className="w-5 h-5" /></div>
             <div>
               <p className="text-sm font-bold">Email Support</p>
               <p className="text-sm text-zinc-400">hmsupport@oyinoost.com.ng</p>
@@ -1192,6 +1468,7 @@ function HelpPage({ onSend }: { onSend: (message: string) => Promise<void> }) {
               try { await onSend(msg); setMsg(""); } finally { setSending(false); }
             }}
             className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-4 text-sm font-bold hover:bg-emerald-500 disabled:opacity-60 transition-all"
+            style={{ backgroundColor: themeColor }}
           >
             {sending ? "Sending..." : "Send Support Request"}
           </button>

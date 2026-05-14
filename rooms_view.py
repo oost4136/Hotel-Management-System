@@ -166,11 +166,18 @@ class AddRoomModal(ctk.CTkToplevel):
         if file_path:
             if not os.path.exists("assets"):
                 os.makedirs("assets")
-            filename = os.path.basename(file_path)
-            new_path = os.path.join("assets", filename)
-            shutil.copy(file_path, new_path)
-            self.image_path = new_path
-            self.img_label.configure(text=filename)
+            
+            # Use unique filename to prevent collisions (Upload instead of just copy)
+            ext = os.path.splitext(file_path)[1]
+            unique_name = f"room_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+            new_path = os.path.join("assets", unique_name)
+            
+            try:
+                shutil.copy(file_path, new_path)
+                self.image_path = new_path
+                self.img_label.configure(text=unique_name)
+            except Exception as e:
+                messagebox.showerror("Upload Error", f"Could not upload image: {e}")
 
     def save(self):
         name = self.name.get().strip()

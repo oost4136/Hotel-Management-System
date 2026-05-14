@@ -3,6 +3,7 @@ from tkinter import messagebox, filedialog
 import os
 import shutil
 from PIL import Image
+from datetime import datetime
 
 class InventoryView(ctk.CTkFrame):
     def __init__(self, parent, db, username, role):
@@ -92,9 +93,12 @@ class InventoryView(ctk.CTkFrame):
             action_frame.pack(side="right", padx=15, pady=15)
             
             ctk.CTkButton(action_frame, text="Sell", width=80, fg_color="#f39c12", hover_color="#d68910", command=lambda i=item: self.open_sell_modal(i)).pack(side="left", padx=15)
-            ctk.CTkButton(action_frame, text="-1", width=40, fg_color="#e74c3c", command=lambda i=item: self.adjust_stock(i, -1)).pack(side="left", padx=5)
-            ctk.CTkButton(action_frame, text="+1", width=40, fg_color="#2ecc71", command=lambda i=item: self.adjust_stock(i, 1)).pack(side="left", padx=5)
-            ctk.CTkButton(action_frame, text="+10", width=40, fg_color="#3498db", command=lambda i=item: self.adjust_stock(i, 10)).pack(side="left", padx=5)
+            
+            # Management buttons - Admin Only
+            if self.role == 'admin':
+                ctk.CTkButton(action_frame, text="-1", width=40, fg_color="#e74c3c", command=lambda i=item: self.adjust_stock(i, -1)).pack(side="left", padx=5)
+                ctk.CTkButton(action_frame, text="+1", width=40, fg_color="#2ecc71", command=lambda i=item: self.adjust_stock(i, 1)).pack(side="left", padx=5)
+                ctk.CTkButton(action_frame, text="+10", width=40, fg_color="#3498db", command=lambda i=item: self.adjust_stock(i, 10)).pack(side="left", padx=5)
 
     def adjust_stock(self, item, amount):
         new_stock = max(0, item['stock_level'] + amount)
@@ -180,10 +184,16 @@ class AddItemModal(ctk.CTkToplevel):
             assets_dir = "assets"
             if not os.path.exists(assets_dir):
                 os.makedirs(assets_dir)
+            
             ext = os.path.splitext(self.selected_image_path)[1]
-            safe_name = name.replace(" ", "_").lower()
-            final_img_path = os.path.join(assets_dir, f"item_{safe_name}{ext}")
-            shutil.copy(self.selected_image_path, final_img_path)
+            unique_name = f"item_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+            final_img_path = os.path.join(assets_dir, unique_name)
+            
+            try:
+                shutil.copy(self.selected_image_path, final_img_path)
+            except Exception as e:
+                print(f"Error copying image: {e}")
+                # Continue without image if copy fails
 
         if self.db.add_inventory_item(name, price, stock, cat, final_img_path):
             self.db.log_action(self.username, "Added Item", f"[{cat}] {name} (Stock: {stock})")
