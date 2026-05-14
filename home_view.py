@@ -1,4 +1,7 @@
 import customtkinter as ctk
+from PIL import Image
+import os
+from theme import theme
 
 class HomeView(ctk.CTkFrame):
     def __init__(self, master, db, app, current_user, current_role, **kwargs):
@@ -9,42 +12,42 @@ class HomeView(ctk.CTkFrame):
         self.current_role = current_role
         
         self.settings = self.db.get_settings()
-        self.theme_color = self.settings.get('primary_color', '#2ecc71')
-
+        self.theme_color = theme.PRIMARY
+        
         self.setup_ui()
 
     def setup_ui(self):
-        # Header
-        header = ctk.CTkLabel(self, text=f"Welcome back, {self.current_user}!", font=("Arial", 28, "bold"))
-        header.pack(pady=(20, 10), anchor="w", padx=30)
+        # Welcome Header
+        welcome_frame = ctk.CTkFrame(self, fg_color="transparent")
+        welcome_frame.pack(fill="x", pady=(20, 40), padx=40)
         
-        sub_header = ctk.CTkLabel(self, text="What would you like to do today? Select an option below.", font=("Arial", 16), text_color="gray")
-        sub_header.pack(pady=(0, 30), anchor="w", padx=30)
-
-        # Quick Actions Grid
+        welcome_text = f"Welcome, {self.current_user}!"
+        ctk.CTkLabel(welcome_frame, text=welcome_text, font=theme.header_font(), text_color=self.theme_color).pack(side="left")
+        
+        # Dashboard Grid
         grid_frame = ctk.CTkFrame(self, fg_color="transparent")
-        grid_frame.pack(fill="both", expand=True, padx=30)
+        grid_frame.pack(expand=True, fill="both", padx=40)
+        grid_frame.grid_columnconfigure((0, 1, 2), weight=1)
 
-        grid_frame.columnconfigure((0, 1), weight=1)
-
-        # Action Cards
-        self.create_action_card(grid_frame, "Rooms & Apartments", "View and manage all rooms", self.app.show_rooms, 0, 0)
-        self.create_action_card(grid_frame, "Check-In Guest", "Register a new guest", self.app.show_checkin, 0, 1)
-        self.create_action_card(grid_frame, "Active Guests", "View currently checked-in guests", self.app.show_active_guests, 1, 0)
-        self.create_action_card(grid_frame, "Live Inventory", "Manage hotel items and stock", self.app.show_inventory, 1, 1)
-
+        # Quick Stats / Actions
+        self.create_action_card(grid_frame, "Check-In", "Register a new guest", self.app.show_checkin, 0, 0)
+        self.create_action_card(grid_frame, "Rooms", "View room availability", self.app.show_rooms, 0, 1)
+        self.create_action_card(grid_frame, "Active Guests", "Manage checked-in guests", self.app.show_active_guests, 0, 2)
+        
+        self.create_action_card(grid_frame, "Inventory", "Bar & kitchen stock", self.app.show_inventory, 1, 0)
+        
         if str(self.current_role).lower() == 'admin':
-            self.create_action_card(grid_frame, "System Settings", "Configure application settings", self.app.show_settings, 2, 0)
-            self.create_action_card(grid_frame, "Staff Management", "Manage system users", self.app.show_staff, 2, 1)
+            self.create_action_card(grid_frame, "Staff Management", "Manage system users", self.app.show_staff, 1, 1)
+            self.create_action_card(grid_frame, "Settings", "Configure system", self.app.show_settings, 1, 2)
 
-    def create_action_card(self, parent, title, description, command, row, col):
-        card = ctk.CTkFrame(parent, fg_color="#2b2b2b", corner_radius=10)
-        card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+    def create_action_card(self, master, title, subtitle, command, row, col):
+        card = ctk.CTkFrame(master, fg_color=theme.BG_DARK, corner_radius=15, height=150)
+        card.grid(row=row, column=col, padx=15, pady=15, sticky="nsew")
+        card.grid_propagate(False)
         
-        btn = ctk.CTkButton(card, text=title, font=("Arial", 18, "bold"), 
-                            fg_color=self.theme_color, hover_color="#1e8449", text_color="white",
-                            height=50, command=command)
-        btn.pack(pady=(20, 5), padx=20, fill="x")
+        ctk.CTkLabel(card, text=title, font=theme.subheader_font(), text_color=self.theme_color).pack(pady=(25, 5))
+        ctk.CTkLabel(card, text=subtitle, font=theme.small_font(), text_color=theme.TEXT_GRAY).pack()
         
-        desc = ctk.CTkLabel(card, text=description, font=("Arial", 12), text_color="gray")
-        desc.pack(pady=(0, 20), padx=20)
+        btn = ctk.CTkButton(card, text="Open", fg_color="transparent", border_width=1, border_color=self.theme_color, 
+                            hover_color=self.theme_color, font=theme.body_font(), command=command)
+        btn.pack(side="bottom", pady=20)

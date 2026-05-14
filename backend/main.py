@@ -1,9 +1,13 @@
 import sys
 import os
+import base64
+import re
+from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -11,6 +15,7 @@ from jose import JWTError, jwt
 # Ensure the parent directory is in the path so we can import the original py files
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import LuxuryDB
+from pdf_generator import PDFGenerator
 
 # --- CONFIGURATION ---
 SECRET_KEY = os.getenv("LUXURY_PMS_SECRET_KEY", "change-this-secret-key")
@@ -19,9 +24,26 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Initialize the existing database logic
 db = LuxuryDB()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ASSETS_DIR = PROJECT_ROOT / "assets"
+LOGOS_DIR = ASSETS_DIR / "logos"
+RECEIPTS_DIR = PROJECT_ROOT / "receipts"
+LOGOS_DIR.mkdir(parents=True, exist_ok=True)
+RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 def rows_to_dicts(rows):
     return [dict(row) for row in rows]
+
+def receipt_url_from_path(path: str) -> str:
+    return f"/receipts/{Path(path).name}"
+
+def safe_upload_filename(filename: str) -> str:
+    stem = Path(filename).stem or "logo"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".png", ".jpg", ".jpeg"}:
+        raise HTTPException(status_code=400, detail="Logo must be a PNG, JPG, or JPEG image")
+    clean_stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", stem).strip("-") or "logo"
+    return f"{clean_stem}-{datetime.now().strftime('%Y%m%d%H%M%S')}{suffix}"
 
 class RoomCreate(BaseModel):
     name: str
@@ -38,6 +60,8 @@ class StaffCreate(BaseModel):
 class SettingsUpdate(BaseModel):
     business_name: str
     primary_color: str
+    secondary_color: str = "#3498db"
+    font_family: str = "Arial"
     caution_fee: float
     logo_path: str = ""
     currency_symbol: str = ""
@@ -78,6 +102,10 @@ class SaleCreate(BaseModel):
 class SupportMessage(BaseModel):
     message: str
 
+class ImageUpload(BaseModel):
+    filename: str
+    data_url: str
+
 # --- SECURITY ---
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
@@ -89,6 +117,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 # --- APP ---
 app = FastAPI(title="Luxury PMS API")
+app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
+app.mount("/receipts", StaticFiles(directory=str(RECEIPTS_DIR)), name="receipts")
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,10 +185,58 @@ def read_settings(current_user: dict = Depends(get_current_user)):
 
 @app.put("/settings")
 def update_settings(data: SettingsUpdate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can update settings")
     if not db.save_settings(data.model_dump()):
         raise HTTPException(status_code=400, detail="Could not save settings")
     db.log_action(current_user["username"], "Updated Settings", data.business_name)
     return db.get_settings()
+
+@app.post("/uploads/image")
+def upload_image(payload: ImageUpload, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can upload images")
+    if "," not in payload.data_url:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+
+    header, encoded = payload.data_url.split(",", 1)
+    if not header.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Logo must be an image")
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+
+    filename = safe_upload_filename(payload.filename)
+    file_path = ASSETS_DIR / filename
+    file_path.write_bytes(image_bytes)
+    return {"image_path": str(file_path), "image_url": f"/assets/{filename}"}
+
+@app.post("/uploads/logo")
+def upload_logo(payload: ImageUpload, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can upload logos")
+    if "," not in payload.data_url:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+
+    header, encoded = payload.data_url.split(",", 1)
+    if not header.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Logo must be an image")
+
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+
+    if len(image_bytes) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Logo image must be 2MB or smaller")
+
+    filename = safe_upload_filename(payload.filename)
+    file_path = LOGOS_DIR / filename
+    file_path.write_bytes(image_bytes)
+    db.log_action(current_user["username"], "Uploaded Logo", filename)
+    return {"logo_path": str(file_path), "logo_url": f"/assets/logos/{filename}"}
 
 # --- ROOM ENDPOINTS ---
 @app.get("/rooms")
@@ -167,6 +245,8 @@ def read_rooms(current_user: dict = Depends(get_current_user)):
 
 @app.post("/rooms")
 def create_room(room: RoomCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can create rooms")
     if not db.register_new_room(room.name, room.price, room.caution_fee, room.image_url, room.amenities):
         raise HTTPException(status_code=400, detail="Could not create room")
     db.log_action(current_user["username"], "Created Room", room.name)
@@ -174,6 +254,8 @@ def create_room(room: RoomCreate, current_user: dict = Depends(get_current_user)
 
 @app.delete("/rooms/{room_id}")
 def delete_room(room_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can delete rooms")
     if not db.delete_room(room_id):
         raise HTTPException(status_code=400, detail="Could not delete room")
     db.log_action(current_user["username"], "Deleted Room", str(room_id))
@@ -185,6 +267,8 @@ def read_amenities(current_user: dict = Depends(get_current_user)):
 
 @app.post("/amenities")
 def create_amenity(amenity: AmenityCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage amenities")
     if not db.add_amenity(amenity.name):
         raise HTTPException(status_code=400, detail="Amenity already exists")
     db.log_action(current_user["username"], "Created Amenity", amenity.name)
@@ -192,6 +276,8 @@ def create_amenity(amenity: AmenityCreate, current_user: dict = Depends(get_curr
 
 @app.delete("/amenities/{name}")
 def delete_amenity(name: str, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage amenities")
     if not db.delete_amenity(name):
         raise HTTPException(status_code=400, detail="Could not delete amenity")
     db.log_action(current_user["username"], "Deleted Amenity", name)
@@ -200,10 +286,14 @@ def delete_amenity(name: str, current_user: dict = Depends(get_current_user)):
 # --- STAFF ENDPOINTS ---
 @app.get("/staff")
 def read_staff(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage staff")
     return db.get_all_users()
 
 @app.post("/staff")
 def create_staff(staff: StaffCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage staff")
     if not db.add_user(staff.username, staff.password, staff.role):
         raise HTTPException(status_code=400, detail="Username already exists")
     db.log_action(current_user["username"], "Created Staff", f"Added new {staff.role}: {staff.username}")
@@ -211,6 +301,8 @@ def create_staff(staff: StaffCreate, current_user: dict = Depends(get_current_us
 
 @app.delete("/staff/{user_id}")
 def delete_staff(user_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can manage staff")
     if not db.delete_user(user_id):
         raise HTTPException(status_code=400, detail="Could not delete user")
     db.log_action(current_user["username"], "Deleted Staff", f"Removed user id: {user_id}")
@@ -302,10 +394,42 @@ def extend_stay(booking_id: int, data: ExtendStayUpdate, current_user: dict = De
 
 @app.post("/bookings/{booking_id}/checkout")
 def complete_checkout(booking_id: int, room_id: int, current_user: dict = Depends(get_current_user)):
+    booking = next((item for item in db.get_active_bookings() if item["booking_id"] == booking_id), None)
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Active booking not found")
+
+    check_in = booking.get("check_in", "")
+    try:
+        check_in_dt = datetime.strptime(check_in, "%Y-%m-%d %H:%M:%S")
+        days_stayed = max(1, (datetime.now() - check_in_dt).days)
+    except Exception:
+        days_stayed = 1
+
+    unpaid_orders = db.get_unpaid_orders_for_booking(booking_id)
+    inventory_total = sum(float(order.get("total", 0) or 0) for order in unpaid_orders)
+    room_total = float(booking.get("room_price", 0) or 0) * days_stayed
+    receipt_data = {
+        "settings": db.get_settings(),
+        "guest_name": booking.get("customer_name", "Guest"),
+        "room_name": booking.get("room_name", "Room"),
+        "check_in": check_in,
+        "days_stayed": days_stayed,
+        "rate": float(booking.get("room_price", 0) or 0),
+        "caution_fee": float(booking.get("caution_fee", 0) or 0),
+        "inventory_orders": unpaid_orders,
+        "inventory_total": inventory_total,
+        "grand_total": room_total + inventory_total,
+    }
+
+    try:
+        receipt_path = PDFGenerator().create_hotel_receipt(receipt_data)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not generate receipt: {exc}")
+
     if not db.complete_checkout(booking_id, room_id):
         raise HTTPException(status_code=400, detail="Could not complete checkout")
     db.log_action(current_user["username"], "Guest Checkout", f"Booking ID: {booking_id}")
-    return {"ok": True}
+    return {"ok": True, "receipt_url": receipt_url_from_path(receipt_path)}
 
 # --- SUPPORT ENDPOINTS ---
 @app.post("/support")

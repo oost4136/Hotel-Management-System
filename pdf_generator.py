@@ -8,6 +8,15 @@ class PDFGenerator:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
+    def _safe_text(self, value):
+        return str(value).encode('latin-1', 'replace').decode('latin-1')
+
+    def _safe_currency(self, value):
+        currency = str(value or '').strip()
+        if currency in {'₦', 'â‚¦'}:
+            return 'NGN '
+        return self._safe_text(currency)
+
     def create_hotel_receipt(self, data):
         pdf = FPDF()
         pdf.add_page()
@@ -16,12 +25,12 @@ class PDFGenerator:
         # 1. Setup Data & Theme Safely
         settings = data.get('settings', {})
         logo_path = settings.get('logo_path', '')
-        currency = settings.get('currency_symbol', '₦')
+        currency = self._safe_currency(settings.get('currency_symbol', 'NGN '))
         
         # Clean text to prevent PDF encoding crashes
-        biz_name = str(settings.get('business_name', 'HOTEL PMS')).encode('latin-1', 'replace').decode('latin-1')
-        guest_name = str(data.get('guest_name', 'Guest')).encode('latin-1', 'replace').decode('latin-1')
-        room_name = str(data.get('room_name', 'Room')).encode('latin-1', 'replace').decode('latin-1')
+        biz_name = self._safe_text(settings.get('business_name', 'HOTEL PMS'))
+        guest_name = self._safe_text(data.get('guest_name', 'Guest'))
+        room_name = self._safe_text(data.get('room_name', 'Room'))
         
         theme_hex = settings.get('primary_color', '#2ecc71').lstrip('#')
         
@@ -95,7 +104,8 @@ class PDFGenerator:
             pdf.cell(190, 8, "Inventory Purchases (Charged to Room)", border=1, ln=True, fill=True)
             pdf.set_font("Arial", size=10)
             for order in inventory_orders:
-                pdf.cell(130, 8, f"  - {order['item_name']} (Qty: {order['quantity']} @ {currency}{order['price']:,.2f})", border=1)
+                item_name = self._safe_text(order['item_name'])
+                pdf.cell(130, 8, f"  - {item_name} (Qty: {order['quantity']} @ {currency}{order['price']:,.2f})", border=1)
                 pdf.cell(60, 8, f"{currency}{order['total']:,.2f}", border=1, ln=True, align='R')
 
         # 7. Total with Theme Color

@@ -10,6 +10,7 @@ from activity_logs_view import ActivityLogsView
 from staff_view import StaffView
 from help_view import HelpView
 from home_view import HomeView
+from theme import theme
 import sys
 import os
 
@@ -31,7 +32,10 @@ class App(ctk.CTk):
         
         # Database & Branding
         self.db = LuxuryDB()
-        self.title("Hotel Management System")
+        self.settings = self.db.get_settings()
+        theme.load_from_settings(self.settings)
+        
+        self.title(self.settings.get('business_name', 'Hotel Management System'))
         self.geometry("1100x700")
         
         # Start with login
@@ -60,14 +64,16 @@ class App(ctk.CTk):
         role_str = str(role).lower() if role else "staff"
         print(f"DEBUG: Loading dashboard for role: {role_str}")
 
-        settings = self.db.get_settings()
-        biz_name = settings.get('business_name', 'LUXURY PMS')
-        theme_color = settings.get('primary_color', '#2ecc71')
+        self.settings = self.db.get_settings()
+        theme.load_from_settings(self.settings)
+        
+        biz_name = self.settings.get('business_name', 'LUXURY PMS')
+        theme_color = theme.PRIMARY
 
         self.container = ctk.CTkFrame(self)
         self.container.pack(expand=True, fill="both")
 
-        self.sidebar = ctk.CTkFrame(self.container, width=220, corner_radius=0, fg_color="#2b2b2b")
+        self.sidebar = ctk.CTkFrame(self.container, width=220, corner_radius=0, fg_color=theme.BG_DARK)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
@@ -75,11 +81,11 @@ class App(ctk.CTk):
         self.content_area.pack(side="right", expand=True, fill="both", padx=20, pady=20)
 
         # Header
-        self.header_label = ctk.CTkLabel(self.sidebar, text=biz_name.upper(), font=("Arial", 18, "bold"), text_color=theme_color)
+        self.header_label = ctk.CTkLabel(self.sidebar, text=biz_name.upper(), font=theme.header_font(), text_color=theme_color)
         self.header_label.pack(pady=(30, 5))
         
         user_display = f"Logged in as: {self.current_user}"
-        ctk.CTkLabel(self.sidebar, text=user_display, font=("Arial", 12), text_color="gray").pack(pady=(0, 20))
+        ctk.CTkLabel(self.sidebar, text=user_display, font=theme.small_font(), text_color=theme.TEXT_GRAY).pack(pady=(0, 20))
 
         # Standard Buttons
         self.nav_btn("Home / Dashboard", self.show_home)
@@ -96,23 +102,26 @@ class App(ctk.CTk):
             self.nav_btn("System Settings", self.show_settings)
             self.nav_btn("System Logs", self.show_logs)
 
-        ctk.CTkButton(self.sidebar, text="Logout", fg_color="#de5d52", command=self.show_login).pack(side="bottom", pady=20, padx=20, fill="x")
+        ctk.CTkButton(self.sidebar, text="Logout", fg_color=theme.DANGER, command=self.show_login).pack(side="bottom", pady=20, padx=20, fill="x")
         self.show_home() # Set default view on login
         
     def reload_app_theme(self):
-        # The Magic Refresh: Destroys the UI and redraws it with new settings
+        # Update settings and reload
+        self.settings = self.db.get_settings()
+        theme.load_from_settings(self.settings)
+        
         if hasattr(self, 'container'):
             self.container.destroy()
         self.load_dashboard(self.current_role)
 
     def nav_btn(self, text, command):
-        settings = self.db.get_settings()
-        theme = settings.get('primary_color', '#2ecc71')
+        theme_color = theme.PRIMARY
         
         ctk.CTkButton(self.sidebar, text=text, fg_color="transparent", 
-                      hover_color=theme, # Buttons glow with theme color
-                      border_width=1, border_color=theme,
-                      anchor="w", command=command).pack(pady=5, padx=20, fill="x")
+                      hover_color=theme_color, # Buttons glow with theme color
+                      border_width=1, border_color=theme_color,
+                      anchor="w", font=theme.body_font(),
+                      command=command).pack(pady=5, padx=20, fill="x")
 
     def clear_screen(self):
         for widget in self.content_area.winfo_children(): widget.destroy()
@@ -131,7 +140,6 @@ class App(ctk.CTk):
 
     def show_checkin(self):
         self.clear_screen()
-        # Pass self.show_rooms as callback so when checkin is done, it redirects to rooms
         CheckInView(self.content_area, self.db, self.show_rooms).pack(expand=True, fill="both")
 
     def show_active_guests(self):
@@ -153,11 +161,6 @@ class App(ctk.CTk):
     def show_help(self):
         self.clear_screen()
         HelpView(self.content_area, self.db, self.current_user).pack(expand=True, fill="both")
-
-    def show_placeholder(self):
-        self.clear_screen()
-        placeholder = ctk.CTkLabel(self.content_area, text="Module under construction...", font=("Arial", 24))
-        placeholder.pack(expand=True)
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")
